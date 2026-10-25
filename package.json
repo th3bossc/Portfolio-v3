@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --webpack --hostname 127.0.0.1",
+    "dev:proxy": "NODE_USE_ENV_PROXY=1 npm run dev --",
     "build": "next build --webpack",
     "start": "next start --hostname 127.0.0.1",
+    "start:proxy": "NODE_USE_ENV_PROXY=1 npm run start --",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm test && npm run build",

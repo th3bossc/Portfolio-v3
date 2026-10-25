@@ -15,6 +15,7 @@ Use `http://localhost:3000` consistently for OAuth. Copy `.env.example` into `.e
 
 - `MONGODB_URI`: connection string for your database user.
 - `MONGODB_DB`: database name, default `portfolio`. Give the database user read/write access and permit your machine's public IP through your provider's network rules.
+- `AUTH_URL`: explicit OAuth origin, locally `http://localhost:3000`. Set this to your HTTPS site origin in production. `NEXT_PUBLIC_SITE_URL` does not configure Auth.js host trust.
 - `AUTH_SECRET`: generate locally with `openssl rand -base64 32`.
 - `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`: GitHub OAuth app credentials.
 - `ADMIN_GITHUB_ID`: the owner's immutable numeric GitHub user ID, not their username or OAuth client ID.
@@ -22,7 +23,20 @@ Use `http://localhost:3000` consistently for OAuth. Copy `.env.example` into `.e
 
 The local OAuth app callback is `http://localhost:3000/api/auth/callback/github`. It requests only `read:user`; admin access is checked on every read and mutation. Use a separate OAuth app for production with your deployed callback URL. Secrets remain server-side and must never be committed.
 
-Restart the server after changing credentials. On this development machine, GitHub requests need Node to honor the existing proxy environment. With Node 24, start locally using `NODE_USE_ENV_PROXY=1 npm run dev`. This keeps TLS verification enabled; do not copy machine-specific proxy credentials into the repository or deployment configuration. An unconfigured or empty database displays a neutral empty site. An unavailable database displays an error; it never substitutes demo content. OAuth sign-in itself does not require a database connection.
+Restart the server after changing credentials. On this development machine, GitHub requests need Node to honor the existing proxy environment. With Node 24, start locally using `npm run dev:proxy` (equivalent to `NODE_USE_ENV_PROXY=1 npm run dev`). This keeps TLS verification enabled; do not copy machine-specific proxy credentials into the repository or deployment configuration. An unconfigured or empty database displays a neutral empty site. An unavailable database displays an error; it never substitutes demo content. OAuth sign-in itself does not require a database connection.
+
+For an OAuth-only check without opening a database connection, run `MONGODB_URI= npm run dev:proxy`. This overrides the URI only for that process; your environment files stay unchanged. Successful sign-in displays an authorized-session confirmation with a Sign out button even when the database is disconnected or unavailable. Test at `http://localhost:3000/admin`, reload to verify the session persists, and sign out to verify access is cleared. Account rejection is shown separately from general OAuth/configuration failures. Do not share raw callback URLs, tokens, or secrets when inspecting server logs.
+
+### Testing the production server locally
+
+`npm run dev` implicitly trusts the local host; `npm start` runs in production mode and requires an explicit OAuth origin. Keep `AUTH_URL=http://localhost:3000` in `.env.local`, then use:
+
+```sh
+npm run build
+npm run start:proxy
+```
+
+Use `npm start` when an outbound proxy is unnecessary. Stop the previous server before starting another on port 3000. Restart after changing `AUTH_URL`; a missing value can produce `UntrustedHost` before GitHub is contacted. Keep the GitHub callback set to `http://localhost:3000/api/auth/callback/github`. For an OAuth-only production check without database access, use `MONGODB_URI= npm run start:proxy`.
 
 ## Populate your database
 
