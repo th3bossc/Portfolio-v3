@@ -1,0 +1,27 @@
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoClient } from "mongodb";
+import { mkdtemp, writeFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fixtureContent } from "./fixtures";
+const exec = promisify(execFile);
+let server: MongoMemoryServer; let client: MongoClient; let directory: string;
+const script=resolve("scripts/migrate-content.ts"); const loader=import.meta.resolve("tsx");
+beforeAll(async()=>{server=await MongoMemoryServer.create({binary:{version:"8.2.6"}});client=await new MongoClient(server.getUri()).connect();directory=await mkdtemp(join(tmpdir(),"portfolio-migrate-"));await writeFile(join(directory,"input.json"),JSON.stringify({version:1,entries:fixtureContent.map(({id,content},i)=>({id,content,order:i*10}))}));});
+afterAll(async()=>{await client?.close();await server?.stop();if(directory)await rm(directory,{recursive:true,force:true});});
+const run=(...args:string[])=>exec(process.execPath,["--import",loader,script,"--input","input.json",...args],{cwd:directory,env:{...process.env,MONGODB_URI:server.getUri(),MONGODB_DB:"migration_cli"}});
+it("executes dry run, draft import, publication and idempotent reruns with backups",async()=>{
+ const records=client.db("migration_cli").collection("content");
+ await run();expect(await records.countDocuments()).toBe(0);
+ await run("--apply");expect(await records.countDocuments()).toBe(fixtureContent.length);expect(await records.countDocuments({published:{$ne:null}})).toBe(0);
+ await run("--apply","--publish");expect(await records.countDocuments({published:{$ne:null}})).toBe(fixtureContent.length);
+ const revisions=(await records.find().toArray()).map(e=>e.revision);
+ await run("--apply","--publish");expect((await records.find().toArray()).map(e=>e.revision)).toEqual(revisions);
+ expect((await readdir(join(directory,".local-content","migrations"))).length).toBe(3);
+ await records.updateOne({kind:"profile"},{$set:{"draft.name":"A manual edit"}});
+ await expect(run("--apply","--publish")).rejects.toThrow();
+ expect((await records.findOne({kind:"profile"}))?.draft.name).toBe("A manual edit");
+});
